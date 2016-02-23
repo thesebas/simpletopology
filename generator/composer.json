@@ -1,0 +1,12 @@
+{
+    "name": "thesebas/generator",
+    "authors": [
+        {
+            "name": "thesebas",
+            "email": "thesebas@thesebas.net"
+        }
+    ],
+    "require": {
+        "predis/predis": "^1.0"
+    }
+}
