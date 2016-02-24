@@ -9,21 +9,23 @@ import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
 
 import java.util.Map;
+import java.util.Random;
 
 public class GABolt extends BaseRichBolt {
     OutputCollector collector;
+    Random random;
 
     @Override
     public void prepare(Map map, TopologyContext topologyContext, OutputCollector outputCollector) {
         this.collector = outputCollector;
-
+        random = new Random();
     }
 
     @Override
     public void execute(Tuple tuple) {
 
         String url = tuple.getStringByField("url");
-        collector.emit(new Values(url, 121212));
+        collector.emit(new Values(url, random.nextInt(100)));
 
     }
 

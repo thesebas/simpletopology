@@ -12,20 +12,19 @@ public class CockpitTopology {
     public static void main(String[] args) throws Exception {
         TopologyBuilder builder = new TopologyBuilder();
 
-
         builder.setSpout("from-redis", new RedisSubSpout(), 10);
 
-        builder.setBolt("fb-bold", new FBBolt(), 3)
+        builder.setBolt("fb-bolt", new FBBolt(), 3)
                 .shuffleGrouping("from-redis");
-        builder.setBolt("ga-bold", new GABolt(), 3)
+        builder.setBolt("ga-bolt", new GABolt(), 3)
                 .shuffleGrouping("from-redis");
-        builder.setBolt("abs-bold", new AbsBolt(), 3)
+        builder.setBolt("abs-bolt", new AbsBolt(), 3)
                 .shuffleGrouping("from-redis");
 
         builder.setBolt("report-bolt", new ReportBolt(), 1)
-                .globalGrouping("fb-bold")
-                .globalGrouping("ga-bold")
-                .globalGrouping("abs-bold");
+                .globalGrouping("fb-bolt")
+                .globalGrouping("ga-bolt")
+                .globalGrouping("abs-bolt");
 
 
         // create the default config object
@@ -52,13 +51,13 @@ public class CockpitTopology {
             LocalCluster cluster = new LocalCluster();
 
             // submit the topology to the local cluster
-            cluster.submitTopology("exclamation", conf, builder.createTopology());
+            cluster.submitTopology("simple", conf, builder.createTopology());
 
             // let the topology run for 30 seconds. note topologies never terminate!
-            Thread.sleep(30000);
+            Thread.sleep(60000);
 
             // kill the topology
-            cluster.killTopology("exclamation");
+            cluster.killTopology("simple");
 
             // we are done, so shutdown the local cluster
             cluster.shutdown();

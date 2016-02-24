@@ -9,13 +9,15 @@ import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
 
 import java.util.Map;
+import java.util.Random;
 
 public class AbsBolt extends BaseRichBolt {
     OutputCollector collector;
-
+    Random random;
     @Override
     public void prepare(Map map, TopologyContext topologyContext, OutputCollector outputCollector) {
         this.collector = outputCollector;
+        random = new Random();
     }
 
     @Override
@@ -23,7 +25,7 @@ public class AbsBolt extends BaseRichBolt {
 
         String url = tuple.getStringByField("url");
 
-        collector.emit(new Values(url, 13.45));
+        collector.emit(new Values(url, random.nextFloat()*20+10));
 
     }
 

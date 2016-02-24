@@ -6,49 +6,82 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.topology.base.BaseRichBolt;
 import backtype.storm.tuple.Tuple;
 
-import java.util.Map;
+import java.util.*;
 
+import com.google.gson.*;
 import com.lambdaworks.redis.RedisClient;
 import com.lambdaworks.redis.RedisConnection;
 
 /**
  * A bolt that prints the word and count to redis
  */
-public class ReportBolt extends BaseRichBolt
-{
-  // place holder to keep the connection to redis
-  transient RedisConnection<String,String> redis;
+public class ReportBolt extends BaseRichBolt {
+    transient RedisConnection<String, String> redis;
 
-  @Override
-  public void prepare(
-      Map                     map,
-      TopologyContext         topologyContext,
-      OutputCollector         outputCollector)
-  {
-    // instantiate a redis connection
-    RedisClient client = new RedisClient("127.0.0.1",6379);
+    @Override
+    public void prepare(
+            Map map,
+            TopologyContext topologyContext,
+            OutputCollector outputCollector) {
+        RedisClient client = RedisClient.create("redis://127.0.0.1:6379/0");
 
-    // initiate the actual connection
-    redis = client.connect();
-  }
+        redis = client.connect();
+    }
 
-  @Override
-  public void execute(Tuple tuple)
-  {
-    // access the first column 'word'
-    //String word = tuple.getStringByField("word");
-    String word = (String) tuple.getStringByField("");
+    @Override
+    public void execute(Tuple tuple) {
+//    "fb-bolt"
+//    "ga-bolt"
+//    "abs-bolt"
+        String url = tuple.getStringByField("url");
+        switch (tuple.getSourceComponent()) {
+            case "fb-bolt":
+                processFB(url, tuple);
+                break;
+            case "ga-bolt":
+                processGA(url, tuple);
+                break;
+            case "abs-bolt":
+                processABS(url, tuple);
+                break;
+        }
+        Map<String,String> allDataWeHave = getAllDataAvailable(url);
+        if (checkIfAllDataAvailable(allDataWeHave)) {
+            Gson gson = new GsonBuilder().create();
+            allDataWeHave.put("url", url);
+            redis.publish("URLSenriched", gson.toJson(allDataWeHave));
+        }
+    }
 
-    // access the second column 'count'
-    //Integer count = tuple.getIntegerByField("count");
-    Integer count = 30;
+    private boolean checkIfAllDataAvailable(Map<String,String> map) {
+        return map.keySet().containsAll(Arrays.asList("pi", "comments", "likes", "revenue"));
+    }
+    private Map<String,String> getAllDataAvailable(String url) {
+        return redis.hgetall(url);
+    }
 
-    // publish the word count to redis using word as the key
-    redis.publish("WordCountTopology", word + "|" + Long.toString(count));
-  }
+    protected void processGA(String url, Tuple tuple) {
+        Map<String, String> data = new HashMap<>();
+        data.put("pi", tuple.getIntegerByField("pi").toString());
+        redis.hmset(url, data);
+    }
 
-  public void declareOutputFields(OutputFieldsDeclarer declarer)
-  {
-    // nothing to add - since it is the final bolt
-  }
+    protected void processFB(String url, Tuple tuple) {
+        Map<String, String> data = new HashMap<>();
+//        "url", "comments", "likes"
+        data.put("comments", tuple.getIntegerByField("comments").toString());
+        data.put("likes", tuple.getIntegerByField("likes").toString());
+        redis.hmset(url, data);
+    }
+
+    protected void processABS(String url, Tuple tuple) {
+        Map<String, String> data = new HashMap<>();
+//        "url", "revenue"
+        data.put("revenue", tuple.getFloatByField("revenue").toString());
+        redis.hmset(url, data);
+    }
+
+    public void declareOutputFields(OutputFieldsDeclarer declarer) {
+        // nothing to add - since it is the final bolt
+    }
 }

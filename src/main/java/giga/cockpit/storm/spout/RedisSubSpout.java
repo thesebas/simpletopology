@@ -8,57 +8,59 @@ import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Values;
 import backtype.storm.utils.Utils;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.lambdaworks.redis.RedisClient;
 import com.lambdaworks.redis.RedisConnection;
+import com.lambdaworks.redis.RedisURI;
 import com.lambdaworks.redis.pubsub.RedisPubSubConnection;
 import com.lambdaworks.redis.pubsub.RedisPubSubListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 
 
 public class RedisSubSpout extends BaseRichSpout {
+    private static final Logger LOG = LoggerFactory.getLogger(RedisSubSpout.class);
+
     SpoutOutputCollector collector;
 
-    RedisConnection<String, String> redis;
-    RedisPubSubConnection<String, String> pubSub;
+    RedisPubSubConnection<String, String> pubSubConnection;
+    RedisConnection<String, String> dataRedis;
     LinkedBlockingQueue<String> queue;
 
     @Override
     public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
         this.collector = collector;
-        // instantiate a redis connection
-        RedisClient client = new RedisClient("127.0.0.1", 6379);
-
-        // initiate the actual connection
-        redis = client.connect();
-        pubSub = client.connectPubSub();
+        pubSubConnection = RedisClient.create("redis://127.0.0.1:6379/0").connectPubSub();
+        dataRedis = RedisClient.create("redis://127.0.0.1:6379/0").connect();
 
         String key = "URLS";
 
-        queue = new LinkedBlockingQueue<>();
-
-        Thread t = new PubSubThread(pubSub, queue, key);
-        t.run();
+        queue = new LinkedBlockingQueue<>(100);
+        Thread t = new PubSubThread(pubSubConnection, dataRedis, queue, key);
+        t.start();
 
     }
 
     @Override
     public void nextTuple() {
         String msg = queue.poll();
-
-        JsonObject obj = new JsonParser().parse(msg).getAsJsonObject();
-        collector.emit(new Values(
-                obj.get("url").getAsString(),
-                obj.get("author").getAsString(),
-                obj.get("resort").getAsString(),
-                obj.get("factor").getAsString()
-        ));
-
+        if (msg == null) {
+            Utils.sleep(50);
+        } else {
+            JsonObject obj = new JsonParser().parse(msg).getAsJsonObject();
+            collector.emit(new Values(
+                    obj.get("url").getAsString(),
+                    obj.get("author").getAsString(),
+                    obj.get("resort").getAsString(),
+                    obj.get("factor").getAsFloat()
+            ));
+        }
     }
 
     @Override
@@ -69,11 +71,13 @@ public class RedisSubSpout extends BaseRichSpout {
     class PubSubThread extends Thread {
 
         RedisPubSubConnection<String, String> pubSub;
+        RedisConnection<String, String> data;
         LinkedBlockingQueue<String> queue;
         String key;
 
-        public PubSubThread(RedisPubSubConnection<String, String> pubSub, LinkedBlockingQueue<String> queue, String key) {
+        public PubSubThread(RedisPubSubConnection<String, String> pubSub, RedisConnection<String, String> data, LinkedBlockingQueue<String> queue, String key) {
             this.pubSub = pubSub;
+            this.data = data;
             this.queue = queue;
             this.key = key;
         }
@@ -81,14 +85,16 @@ public class RedisSubSpout extends BaseRichSpout {
         public void run() {
             pubSub.addListener(new RedisPubSubListener<String, String>() {
                 @Override
-                public void message(String channel, String message) {
-                    queue.offer(message);
-
+                public void message(String channel, String uniqKey) {
+                    String c = data.multi();
+                    data.get(uniqKey);
+                    data.del(uniqKey);
+                    List<Object> result = data.exec();
+                    queue.offer(result.get(0).toString());
                 }
 
                 @Override
                 public void message(String pattern, String channel, String message) {
-                    queue.offer(message);
                 }
 
                 @Override
@@ -111,6 +117,7 @@ public class RedisSubSpout extends BaseRichSpout {
 
                 }
             });
+            pubSub.subscribe(key);
         }
     }
 }
