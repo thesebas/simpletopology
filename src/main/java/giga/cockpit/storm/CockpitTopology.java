@@ -12,7 +12,7 @@ public class CockpitTopology {
     public static void main(String[] args) throws Exception {
         TopologyBuilder builder = new TopologyBuilder();
 
-        builder.setSpout("from-redis", new RedisSubSpout(), 10);
+        builder.setSpout("from-redis", new RedisSubSpout(), 1);
 
         builder.setBolt("fb-bolt", new FBBolt(), 3)
                 .shuffleGrouping("from-redis");
