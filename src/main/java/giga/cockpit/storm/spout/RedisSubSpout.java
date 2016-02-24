@@ -1,5 +1,6 @@
 package giga.cockpit.storm.spout;
 
+import backtype.storm.Config;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.OutputFieldsDeclarer;
@@ -12,7 +13,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.lambdaworks.redis.RedisClient;
 import com.lambdaworks.redis.RedisConnection;
-import com.lambdaworks.redis.RedisURI;
 import com.lambdaworks.redis.pubsub.RedisPubSubConnection;
 import com.lambdaworks.redis.pubsub.RedisPubSubListener;
 import org.slf4j.Logger;
@@ -68,6 +68,13 @@ public class RedisSubSpout extends BaseRichSpout {
         declarer.declare(new Fields("url", "author", "resort", "factor"));
     }
 
+    @Override
+    public Map<String, Object> getComponentConfiguration() {
+        Config ret = new Config();
+        ret.setMaxTaskParallelism(1);//force one spout process
+        return ret;
+    }
+
     class PubSubThread extends Thread {
 
         RedisPubSubConnection<String, String> pubSub;
@@ -85,12 +92,8 @@ public class RedisSubSpout extends BaseRichSpout {
         public void run() {
             pubSub.addListener(new RedisPubSubListener<String, String>() {
                 @Override
-                public void message(String channel, String uniqKey) {
-                    String c = data.multi();
-                    data.get(uniqKey);
-                    data.del(uniqKey);
-                    List<Object> result = data.exec();
-                    queue.offer(result.get(0).toString());
+                public void message(String channel, String message) {
+                    queue.offer(message);
                 }
 
                 @Override

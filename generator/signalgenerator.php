@@ -8,13 +8,11 @@ $resorts = explode(',', 'android,xbox,apple');
 
 for ($i = 1; $i < 100000; $i++) {
     echo $i, PHP_EOL;
-    $msg= json_encode([
-        'url'=>"http://example.com/page/{$i}",
-        'author'=>$authors[array_rand($authors, 1)],
-        'resort'=>$resorts[array_rand($resorts, 1)],
-        'factor'=>rand(1,10)/10,
+    $msg = json_encode([
+        'url' => "http://example.com/page/{$i}",
+        'author' => $authors[array_rand($authors, 1)],
+        'resort' => $resorts[array_rand($resorts, 1)],
+        'factor' => rand(1, 10) / 10,
     ]);
-    $key = uniqid();
-    $client->set($key, $msg);
-    $client->publish("URLS", $key);
+    $client->publish("URLS", $msg);
 }
