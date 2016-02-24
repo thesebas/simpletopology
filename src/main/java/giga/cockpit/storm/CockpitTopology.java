@@ -4,6 +4,7 @@ import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.StormSubmitter;
 import backtype.storm.topology.TopologyBuilder;
+import backtype.storm.tuple.Fields;
 import giga.cockpit.storm.spout.RedisSubSpout;
 
 public class CockpitTopology {
@@ -15,16 +16,18 @@ public class CockpitTopology {
         builder.setSpout("from-redis", new RedisSubSpout(), 1);
 
         builder.setBolt("fb-bolt", new FBBolt(), 3)
-                .shuffleGrouping("from-redis");
-        builder.setBolt("ga-bolt", new GABolt(), 3)
-                .shuffleGrouping("from-redis");
-        builder.setBolt("abs-bolt", new AbsBolt(), 3)
-                .shuffleGrouping("from-redis");
+                .fieldsGrouping("from-redis", new Fields("url"));
 
-        builder.setBolt("report-bolt", new ReportBolt(), 1)
-                .globalGrouping("fb-bolt")
-                .globalGrouping("ga-bolt")
-                .globalGrouping("abs-bolt");
+        builder.setBolt("ga-bolt", new GABolt(), 3)
+                .fieldsGrouping("from-redis", new Fields("url"));
+
+        builder.setBolt("abs-bolt", new AbsBolt(), 3)
+                .fieldsGrouping("from-redis", new Fields("url"));
+
+        builder.setBolt("report-bolt", new ReportBolt(), 5)
+                .fieldsGrouping("fb-bolt", new Fields("url"))
+                .fieldsGrouping("ga-bolt", new Fields("url"))
+                .fieldsGrouping("abs-bolt", new Fields("url"));
 
 
         // create the default config object
@@ -32,6 +35,7 @@ public class CockpitTopology {
 
         // set the config in debugging mode
         conf.setDebug(true);
+        conf.put(Config.TOPOLOGY_DEBUG, false);
 
         if (args != null && args.length > 0) {
 

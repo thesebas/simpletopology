@@ -11,21 +11,32 @@ import java.util.*;
 import com.google.gson.*;
 import com.lambdaworks.redis.RedisClient;
 import com.lambdaworks.redis.RedisConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A bolt that prints the word and count to redis
  */
+
+
 public class ReportBolt extends BaseRichBolt {
+    private static final Logger LOG = LoggerFactory.getLogger(ReportBolt.class);
+
     transient RedisConnection<String, String> redis;
 
-    @Override
-    public void prepare(
-            Map map,
-            TopologyContext topologyContext,
-            OutputCollector outputCollector) {
-        RedisClient client = RedisClient.create("redis://127.0.0.1:6379/0");
+    protected Map<String, Map<String, String>> store;
 
-        redis = client.connect();
+    TopologyContext topologyContext;
+    protected Gson gson;
+
+    @Override
+    public void prepare(Map map, TopologyContext topologyContext, OutputCollector outputCollector) {
+
+        redis = RedisClient.create("redis://127.0.0.1:6379/0").connect();
+        store = new HashMap<>();
+        gson = new Gson();
+        this.topologyContext = topologyContext;
+
     }
 
     @Override
@@ -33,7 +44,10 @@ public class ReportBolt extends BaseRichBolt {
 //    "fb-bolt"
 //    "ga-bolt"
 //    "abs-bolt"
+
         String url = tuple.getStringByField("url");
+        LOG.info("input from {} for url {} processed in {}", tuple.getSourceComponent(), url, topologyContext.getThisTaskId());
+
         switch (tuple.getSourceComponent()) {
             case "fb-bolt":
                 processFB(url, tuple);
@@ -45,40 +59,50 @@ public class ReportBolt extends BaseRichBolt {
                 processABS(url, tuple);
                 break;
         }
-        Map<String,String> allDataWeHave = getAllDataAvailable(url);
+        Map<String, String> allDataWeHave = getAllDataAvailable(url);
         if (checkIfAllDataAvailable(allDataWeHave)) {
-            Gson gson = new GsonBuilder().create();
-            allDataWeHave.put("url", url);
-            redis.publish("URLSenriched", gson.toJson(allDataWeHave));
+            LOG.info("go all data for [{}], publising", url);
+            HashMap<String, String> msg = new HashMap<>(allDataWeHave);
+            msg.put("url", url);
+            redis.publish("URLSenriched", gson.toJson(msg));
         }
     }
 
-    private boolean checkIfAllDataAvailable(Map<String,String> map) {
+    private boolean checkIfAllDataAvailable(Map<String, String> map) {
         return map.keySet().containsAll(Arrays.asList("pi", "comments", "likes", "revenue"));
     }
-    private Map<String,String> getAllDataAvailable(String url) {
-        return redis.hgetall(url);
+
+    private Map<String, String> getAllDataAvailable(String url) {
+        return getStoreFor(url);
     }
 
     protected void processGA(String url, Tuple tuple) {
-        Map<String, String> data = new HashMap<>();
+        Map<String, String> data = getStoreFor(url);
         data.put("pi", tuple.getIntegerByField("pi").toString());
-        redis.hmset(url, data);
     }
 
     protected void processFB(String url, Tuple tuple) {
-        Map<String, String> data = new HashMap<>();
+        Map<String, String> data = getStoreFor(url);
 //        "url", "comments", "likes"
+
         data.put("comments", tuple.getIntegerByField("comments").toString());
         data.put("likes", tuple.getIntegerByField("likes").toString());
-        redis.hmset(url, data);
     }
 
     protected void processABS(String url, Tuple tuple) {
-        Map<String, String> data = new HashMap<>();
+        Map<String, String> data = getStoreFor(url);
 //        "url", "revenue"
         data.put("revenue", tuple.getFloatByField("revenue").toString());
-        redis.hmset(url, data);
+    }
+
+
+    protected Map<String, String> getStoreFor(String url) {
+        if (!store.containsKey(url)) {
+            Map<String, String> map = new HashMap<>();
+            store.put(url, map);
+            return map;
+        }
+        return store.get(url);
     }
 
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
