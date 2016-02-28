@@ -24,10 +24,14 @@ public class CockpitTopology {
         builder.setBolt("abs-bolt", new AbsBolt(), 3)
                 .fieldsGrouping("from-redis", new Fields("url"));
 
+        builder.setBolt("kt-bolt", new KTBolt(), 3)
+                .fieldsGrouping("from-redis", new Fields("url"));
+
         builder.setBolt("report-bolt", new ReportBolt(), 5)
                 .fieldsGrouping("fb-bolt", new Fields("url"))
                 .fieldsGrouping("ga-bolt", new Fields("url"))
-                .fieldsGrouping("abs-bolt", new Fields("url"));
+                .fieldsGrouping("abs-bolt", new Fields("url"))
+                .fieldsGrouping("kt-bolt", new Fields("url"));
 
 
         // create the default config object
