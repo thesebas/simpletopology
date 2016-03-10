@@ -35,17 +35,17 @@ public class GroupCountTopology {
 
         TridentTopology topology = new TridentTopology();
 
-        String query = "SELECT url, date, pi, pif, tags FROM cockpit2_testTogether";
+        String query = "SELECT \"url\", \"date\", \"pi\", \"pif\", \"tags\" FROM \"cockpit2_testTogether\"";
         Stream stream = topology.newStream("cassandra", new CassandraSpout(query))
                 .each(
                         new Fields("date", "tags", "pi", "pif"),
                         new TagExpander(),
-                        new Fields("date", "tag", "pi", "pif")
+                        new Fields("ndate", "ntag", "npi", "pnif")
                 );
 
         TridentState state = stream
-                .project(new Fields("tag", "pi"))
-                .groupBy(new Fields("tag"))
+                .project(new Fields("ntag", "npi"))
+                .groupBy(new Fields("ntag"))
                 .persistentAggregate(
                         new MemoryMapState.Factory(),
                         new Sum(),
@@ -97,26 +97,28 @@ public class GroupCountTopology {
 
     private static class CassandraSpout extends BaseRichSpout {
         private final String query;
-        private Cluster cluster;
-        private ResultSet rs;
-        private Iterator<Row> rsiterator;
+        transient private Cluster cluster;
+        transient private ResultSet rs;
+        transient private Iterator<Row> rsiterator;
         private SpoutOutputCollector outputCollector;
 
 
         public CassandraSpout(String query) {
             this.query = query;
 
-            cluster = Cluster.builder()
-                    .addContactPoint("10.0.40.42")
-                    .build();
+
 
         }
 
         @Override
         public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
+            cluster = Cluster.builder()
+                    .addContactPoint("10.0.40.42")
+                    .build();
+
             outputCollector = collector;
 
-            Session session = cluster.connect();
+            Session session = cluster.connect("el_test");
 
             rs = session.execute(this.query);
             rsiterator = rs.iterator();
@@ -130,7 +132,7 @@ public class GroupCountTopology {
 
                 outputCollector.emit(new Values(
                         row.getString("url"),
-                        row.getDate("date"),
+                        row.getTimestamp("date"),
                         row.getInt("pi"),
                         row.getFloat("pif"),
                         row.getSet("tags", String.class)
